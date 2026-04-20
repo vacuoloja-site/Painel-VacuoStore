@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Gerador de Links - VacuoStore</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:#111; margin:0; color:#eee; }
+    header { background:#000; color:#f00; padding:20px; text-align:center; }
+    header img { max-height:60px; vertical-align:middle; }
+    h1 { display:inline-block; margin-left:15px; }
+    main { max-width:900px; margin:20px auto; background:#222; padding:20px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.5); }
+    input, select { padding:8px; margin:5px; width:90%; border:1px solid #f00; border-radius:4px; background:#333; color:#fff; }
+    button { background:#f00; color:#fff; border:none; padding:10px 20px; margin:5px; border-radius:4px; cursor:pointer; }
+    button:hover { background:#c00; }
+    #resultado { margin-top:20px; font-weight:bold; color:#f00; }
+    .link-actions { margin-top:10px; }
+    canvas { margin-top:20px; background:#fff; border-radius:8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="https://www.vacuostore.com.br/logo.png" alt="VacuoStore Logo">
+    <h1>Gerador de Links VacuoStore</h1>
+  </header>
+
+  <div id="mensagem" style="text-align:center; margin-top:20px;"></div>
+
+  <main id="painel" style="display:none;">
+    <h2>Adicionar Produto</h2>
+    <input id="nomeProduto" placeholder="Nome curto (ex: gimbal)">
+    <input id="urlProduto" placeholder="URL completa do produto">
+    <button onclick="adicionarProduto()">Adicionar Produto</button>
+
+    <h2>Adicionar Origem</h2>
+    <input id="novaOrigem" placeholder="Nome da origem (ex: instagram_destaques)">
+    <button onclick="adicionarOrigem()">Adicionar Origem</button>
+
+    <h2>Gerar Link</h2>
+    <label>Produto:</label>
+    <select id="produto"></select><br>
+
+    <label>Origem:</label>
+    <select id="src"></select><br>
+
+    <button onclick="gerarLink()">Gerar Link</button>
+
+    <div id="resultado"></div>
+    <div class="link-actions" id="linkActions" style="display:none;">
+      <button onclick="copiarLink()">Copiar Link</button>
+      <button onclick="abrirLink()">Abrir Link</button>
+    </div>
+
+    <h2>Gráfico de Cliques</h2>
+    <canvas id="grafico" width="700" height="350"></canvas>
+    <div>
+      <button onclick="resetarGrafico()">Resetar Gráfico Local</button>
+      <button onclick="resetarPlanilha()">Resetar Planilha (WebApp)</button>
+      <button onclick="exportarCSVWebApp()">Exportar CSV (WebApp)</button>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    const produtos = {
+      "gimbal": "https://www.vacuostore.com.br/estabilizador-gimbal-de-smartphone-360-rastreamento-inteligente-de-rosto-ai-controle-inteligente",
+      "aspirador-xpto": "https://www.vacuostore.com.br/aspirador-xpto",
+      "filtro-y": "https://www.vacuostore.com.br/filtro-y"
+    };
+
+    const origens = [
+      "instagram_bio", "instagram_stories", "instagram_destaques",
+      "facebook_feed", "facebook_stories", "tiktok",
+      "whatsapp", "whatsapp_stories"
+    ];
+
+    let ultimoLink = "";
+    let cliques = {};
+
+    function atualizarListaProdutos() {
+      const select = document.getElementById("produto");
+      select.innerHTML = "";
+      for(const nome in produtos) {
+        const opt = document.createElement("option");
+        opt.value = nome;
+        opt.textContent = nome;
+        select.appendChild(opt);
+      }
+    }
+
+    function atualizarListaOrigens() {
+      const select = document.getElementById("src");
+      select.innerHTML = "";
+      origens.forEach(o => {
+        const opt = document.createElement("option");
+        opt.value = o;
+        opt.textContent = o;
+        select.appendChild(opt);
+      });
+    }
+
+    function adicionarProduto() {
+      const nome = document.getElementById("nomeProduto").value;
+      const url = document.getElementById("urlProduto").value;
+      if(nome && url) {
+        produtos[nome] = url;
+        atualizarListaProdutos();
+        document.getElementById("nomeProduto").value = "";
+        document.getElementById("urlProduto").value = "";
+      }
+    }
+
+    function adicionarOrigem() {
+      const nova = document.getElementById("novaOrigem").value;
+      if(nova) {
+        origens.push(nova);
+        atualizarListaOrigens();
+        document.getElementById("novaOrigem").value = "";
+      }
+    }
+
+    function gerarLink() {
+      const produto = document.getElementById("produto").value;
+      const src = document.getElementById("src").value;
+      ultimoLink = `https://redir.vacuostore.com.br/?produto=${produto}&src=${src}`;
+      document.getElementById("resultado").innerText = "Link gerado: " + ultimoLink;
+      document.getElementById("linkActions").style.display = "block";
+    }
+
+    function copiarLink() {
+      navigator.clipboard.writeText(ultimoLink).then(() => {
+        alert("Link copiado para a área de transferência!");
+      });
+    }
+
+    function abrirLink() {
+      window.open(ultimoLink, "_blank");
+    }
+
+    async function carregarDadosPlanilha() {
+      const url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSfYOlgSW_-e9GI5uZ8nhAa1SE-MpY8xlK2LV3iGbc1dtiWEjlo6eynZkVCL58pRpfGlPB7fO88HJbU/pub?gid=138818566&single=true&output=csv";
+      const resp = await fetch(url);
+      const texto = await resp.text();
+      const linhas = texto.split("\n").slice(1);
+      cliques = {};
+
+      linhas.forEach(l => {
+        const cols = l.split(",");
+        const origem = cols[0];
+        if(origem) {
+          cliques[origem] = (cliques[origem] || 0) + 1;
+        }
+      });
+
+      atualizarGrafico();
+    }
+
+    function atualizarGrafico() {
+      const ctx = document.getElementById("grafico").getContext("2d");
+      if(window.chart) window.chart.destroy();
+      window.chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: Object.keys(cliques),
+          datasets: [{
+            label: 'Cliques por Origem',
+            data: Object.values(cliques),
+            backgroundColor: '#f00'
+          }]
+        },
+        options: {
+          scales: { x: { ticks: { color: '#fff' } }, y: { ticks: { color: '#fff' } } },
+          plugins: { legend: { labels: { color: '#fff' } } }
+        }
+      });
+    }
+
+    function resetarGrafico() {
+      cliques = {};
+      atualizarGrafico();
+      alert("Registros apagados localmente (apenas no painel).");
+    }
+
+    function resetarPlanilha() {
+      const webAppUrl = "https://script.google.com/macros/s/AKfycbxOrfmnB7rSgOFS4VMhMt7hvmu9i-ofgM6JsjxDVRqYlm6kXl_s0NH3D4PpkwcuhGe30Q/exec"; // cole aqui a URL do seu WebApp
+      fetch(webAppUrl + "?action=reset")
+        .then(resp => resp.text())
+        .then(texto => alert(texto))
+        .catch(() => alert("Erro ao resetar a planilha."));
+    }
+
+    function exportarCSVWebApp() {
+      const webAppUrl = "https://script.google.com/macros/s/AKfycbxOrfmnB7rSgOFS4VMhMt7hvmu9i-ofgM6JsjxDVRqYlm6kXl_s0NH3D4PpkwcuhGe30Q/exec"; // cole aqui a URL do seu WebApp
+      fetch(webAppUrl + "?action=export")
+        .then(resp => resp.text())
+        .then(csv => {
+          const blob = new Blob([csv], { type: "text/csv" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "cliques_vacuostore.csv";
+          a.click();
+          URL.revokeObjectURL(url);
+        })
+        .catch(() => alert("Erro ao exportar CSV."));
+    }
+
+        async function verificarAcesso() {
+      const webAppUrl = "https://script.google.com/macros/s/AKfycbxOrfmnB7rSgOFS4VMhMt7hvmu9i-ofgM6JsjxDVRqYlm6kXl_s0NH3D4PpkwcuhGe30Q/exec"; // cole aqui a URL do seu WebApp
+      try {
+        const resp = await fetch(webAppUrl);
+        const texto = await resp.text();
+
+        if (texto.trim() === "OK") {
+          // Usuário autorizado → mostra o painel
+          document.getElementById("painel").style.display = "block";
+          document.getElementById("mensagem").innerText = "Acesso autorizado.";
+          atualizarListaProdutos();
+          atualizarListaOrigens();
+          carregarDadosPlanilha();
+        } else {
+          // Usuário não autorizado → bloqueia
+          document.getElementById("mensagem").innerText = "Acesso negado. Você não tem permissão.";
+          document.getElementById("painel").style.display = "none";
+        }
+      } catch (e) {
+        document.getElementById("mensagem").innerText = "Erro ao verificar acesso.";
+      }
+    }
+
+    // Chama a verificação assim que a página carregar
+    window.onload = verificarAcesso;
+  </script>
+</body>
+</html>
